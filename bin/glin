@@ -1,12 +1,3 @@
 #! /bin/python3 
-import logging
-from threading import Thread
-from time import sleep
-import glin.animations
-import glin.app
-if __name__ == "__main__":
-    logging.basicConfig(level=logging.DEBUG)
-    app = glin.app.GlinApp(160)
-    wid = app.registerAnimation(glin.animations.StaticColorAnimation)
-    wid = app.registerAnimation(glin.animations.NovaAnimation)
-    app.execute()
+import glin.__main__
+glin.__main__.boot()
