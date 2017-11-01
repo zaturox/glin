@@ -1,14 +1,12 @@
 #! /bin/python3 
 import logging
-import zmq
 from threading import Thread
 from time import sleep
 import glin.animations
-import glin
+import glin.app
 if __name__ == "__main__":
-    logging.basicConfig(level=logging.INFO)
-    ctx = zmq.Context()
-    app = glin.GlinApp(ctx, 160)
+    logging.basicConfig(level=logging.DEBUG)
+    app = glin.app.GlinApp(160)
     wid = app.registerAnimation(glin.animations.StaticColorAnimation)
     wid = app.registerAnimation(glin.animations.NovaAnimation)
     app.execute()

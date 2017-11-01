@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Glin Server - Manage Animations for LED Stripes"""
 
 import logging
@@ -16,8 +15,8 @@ from zmq.eventloop.zmqstream import ZMQStream
 from glin import hwcomm
 
 class GlinApp:
-    def __init__(self, ctx, numLed, port=6606):
-        self.ctx = ctx
+    def __init__(self, numLed, port=6606):
+        self.ctx = zmq.Context()
         self.numLed = numLed
         self.port = port
 
@@ -315,5 +314,3 @@ class GlinAppZmqCollector:
         except Exception as inst:
             logging.error(inst)
             raise
-
-
