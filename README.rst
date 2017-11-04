@@ -39,7 +39,7 @@ install
      1. clone this repository
      2. cd into the project folder
      3. run ``sudo pip install .`` or ``sudo pip install -e .``
- * using PyPI (currently not available):
+ * using PyPI:
      ``sudo pip install glin``
  
 run with ``glin``
