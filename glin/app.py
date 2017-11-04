@@ -12,18 +12,15 @@ import zmq
 from zmq.eventloop.ioloop import IOLoop, PeriodicCallback
 from zmq.eventloop.zmqstream import ZMQStream
 
-from glin import hwcomm
-
 class GlinApp:
-    def __init__(self, numLed, port=6606):
+    def __init__(self, numLed, hwBackend, port=6606):
         self.ctx = zmq.Context()
         self.numLed = numLed
         self.port = port
 
         self.loop = IOLoop.instance()
         self.caller = PeriodicCallback(self.on_nextFrame, 1000/30, self.loop)
-        self.hwComm = hwcomm.UDP()
-        self.hwComm.prepare(numLed)
+        self.hwComm = hwBackend
         self.zmqCollector = GlinAppZmqCollector(self, self.ctx)
         self.zmqPublisher = GlinAppZmqPublisher(self, self.ctx)
 
