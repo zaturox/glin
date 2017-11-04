@@ -26,7 +26,7 @@ upcoming features:
  * use configuration files for server side configuration
  
 dependencies:
- * Python 3 (may also work on Python 2)
+ * Python 3 (Python 2 is not supported)
  * ZeroMQ (pyzmq)
  * Numpy
  * setuptools
@@ -44,7 +44,10 @@ install
  
 run with ``glin``
 
-
+Parameters
+----------
+ * ``-c``, ``--config``: specify configuration file. A example configuration file is included (example.conf)
+ * ``-h``, ``--help``: show help
  
 License
 -------
