@@ -21,6 +21,7 @@ class GlinApp:
         self.loop = IOLoop.instance()
         self.caller = PeriodicCallback(self.on_nextFrame, 1000/30, self.loop)
         self.hwComm = hwBackend
+        self.hwComm.connect()
         self.zmqCollector = GlinAppZmqCollector(self, self.ctx)
         self.zmqPublisher = GlinAppZmqPublisher(self, self.ctx)
 
@@ -155,7 +156,9 @@ class GlinApp:
             self.loop.start()
             logging.debug("Leaving IOLoop")
         except KeyboardInterrupt:
-            logging.debug("Leaving IOLoop")
+            logging.debug("Leaving IOLoop by KeyboardInterrupt")
+        finally:
+            self.hwComm.disconnect()
 
 
 class GlinAppZmqPublisher:

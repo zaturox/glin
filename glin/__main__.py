@@ -8,6 +8,7 @@ import glin.animations
 import glin.app
 import glin.hwBackend
 
+from pkg_resources import iter_entry_points
 
 def boot():
     argparser = argparse.ArgumentParser(
@@ -27,16 +28,32 @@ def boot():
     if "leds" not in cfg["core"]:
         logging.critical("No leds value found in [core] section in configurations files")
         sys.exit()
-    
     numLed = int(cfg["core"]["leds"])
+    if "hwbackend" not in cfg["core"]:
+        logging.critical("No hwbackend value found in [core] section in configurations files")
+        sys.exit()
+    backend_name = cfg["core"]["hwbackend"]
 
-    Backend = glin.hwBackend.UDP
-    backendCfg = dict(cfg[Backend.EXT_NAME]) if Backend.EXT_NAME in cfg else {}
+    hwbackends = list(iter_entry_points(group='glin.hwbackend', name=backend_name))
+    if len(hwbackends) != 1:
+        logging.critical("Found multiple hwbackend with same name. Cant decide upon one. Quitting.")
+        sys.exit()
+    Backend = hwbackends[0].load()
+    backendCfg = dict(cfg[backend_name]) if backend_name in cfg else {}
     backend = Backend(numLed = numLed, config = backendCfg)
 
     app = glin.app.GlinApp(numLed, hwBackend = backend)
-    app.registerAnimation(glin.animations.StaticColorAnimation)
-    app.registerAnimation(glin.animations.NovaAnimation)
+
+    for entry_point in iter_entry_points(group='glin.animation', name=None):
+        animClass = entry_point.load()
+        try:
+            if issubclass(animClass, glin.animations.AbstractAnimation):
+                app.registerAnimation(animClass)
+            else:
+                logging.error("This is not a valid animation class. Has to be subclass of glin.animations:AbstraktAnimation. Ignoring.: {ep}".format(ep=entry_point))
+        except TypeError:
+            logging.error("This is not a Class. Ignoring.: {ep}".format(ep=entry_point))
+
     app.execute()
 
 if __name__ == '__main__':
