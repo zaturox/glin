@@ -1,5 +1,6 @@
 """Glin Server - Manage Animations for LED Stripes"""
 
+import datetime
 import logging
 from types import SimpleNamespace
 from collections import namedtuple
@@ -35,13 +36,16 @@ class GlinApp:
         self.state.activeSceneId = None
         self.state.activeAnimation = None
         self.state.scenes = {}
-        self.state.sceneIdCtr = 0
         self.state.brightness = 1.0
+        self.state.sceneIdCtr = 0
         self.state.mainswitch = True
+        self.state.targetFps = 0
+        self.state.lastFrameSent = None
 
     def setBrightness(self, brightness):
         brightness = min([1.0, max([brightness, 0.0])]) # enforces range 0 ... 1
         self.state.brightness = brightness
+        self._repeatLastFrame()
         self.zmqPublisher.publishBrightness(brightness)
     def registerAnimation(self, animType):
         self.state.animationClasses.append(animType)
@@ -117,12 +121,13 @@ class GlinApp:
             targetFps = min(self.config.maxFps, self.state.activeAnimation.maxFps)
             if targetFps < 0:
                 targetFps = 0
+            self.state.targetFps = targetFps
             logging.debug("Running with {fps} FPS".format(fps=targetFps))
             self.state.activeAnimation.prepare(self.numLed, targetFps,self.state.scenes[self.state.activeSceneId].config) 
             if targetFps > 0:   # 0 FPS means one-shot -> no periodic callback required
                 self.caller.callback_time = 1000/targetFps
                 self.caller.start()
-            self.loop.add_callback_from_signal(self.doNextFrame) # execute once to not have to wait for periodic callback (self.caller), esp. if 0 or low FPS
+            self.loop.add_callback_from_signal(self._doNextFrame) # execute once to not have to wait for periodic callback (self.caller), esp. if 0 or low FPS
         else:
             self.state.activeAnimation = None # don't do anything. stuck with last frame. 
 
@@ -137,17 +142,27 @@ class GlinApp:
 
     def on_nextFrame(self):
         logging.debug("ioloop: next frame")
-        self.doNextFrame()
+        self._doNextFrame()
 
-    def doNextFrame(self):
+    def _doNextFrame(self):
         if self.state.activeAnimation:
             buf = np.zeros(3*self.numLed)
             self.state.activeAnimation.nextFrame(buf)
-            np.clip(buf, 0.0, 1.0, out=buf)
-            buf *= self.state.brightness
-            self.hwComm.send(buf)
+            self.state._buf = np.copy(buf)
+            self._sendFrame(buf)
         else:
             logging.debug("app: No Active Animation")
+
+    def _repeatLastFrame(self):
+        if self.state._buf is not None and self.state.activeAnimation is not None: # only do something, if there is an active animation, else output is considered to be turned off
+            if self.state.targetFps < self.config.maxFps / 4: # to not overload hwbackend, only resend, if active animation is very slow
+                self._sendFrame(np.copy(self.state._buf))
+
+    def _sendFrame(self, buf):
+            np.clip(buf, 0.0, 1.0, out=buf)
+            self.state.lastFrameSent = datetime.datetime.now()
+            buf *= self.state.brightness
+            self.hwComm.send(buf)
 
     def execute(self):
         #self.caller.start()
