@@ -1,10 +1,13 @@
 import numpy as np
 
 class AbstractAnimation:
-    maxFps = float('inf') # unlimited, use system maxFps
     name = "AbstractAnimation" # presentet to UI
     def __init__(self):
         pass
+
+    def maxFps(self):
+        return float('inf') # unlimited, use system maxFps
+
     @staticmethod
     def checkConfig(config):
         return True
@@ -21,8 +24,9 @@ class AbstractAnimation:
         pass
 
 class StaticColorAnimation(AbstractAnimation):
-    maxFps = 0 # static
     name = "Static Color" # presentet to UI
+    def maxFps(self):
+        return 0
     #def __init__(self):
     #    pass
     def prepare(self, numLed, targetFps, config):
@@ -44,8 +48,9 @@ class StaticColorAnimation(AbstractAnimation):
         buf[2::3] = np.ones(self.numLed) * self.blue
 
 class NovaAnimation(AbstractAnimation):
-    maxFps = 30
     name = "Nova"
+    def maxFps(self):
+        return 30
     class Nova:
         def __init__(self, numLed):
             self.numLed = numLed

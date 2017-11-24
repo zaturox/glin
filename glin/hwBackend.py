@@ -14,6 +14,8 @@ class AbstractHwBackend:
         pass
     def disconnect(self):
         pass
+    def maxFps(self):
+        return float('inf')
 
 class UDP(AbstractHwBackend):
     def __init__(self, numLed, config):
@@ -32,3 +34,5 @@ class UDP(AbstractHwBackend):
         self.sock.sendto(buf, (self.host, self.port))
     def disconnect(self):
         self.sock = None
+    def maxFps(self):
+        return 100

@@ -118,7 +118,7 @@ class GlinApp:
         if self.state.activeSceneId in self.state.scenes: # is sceneId valid? if not, assume there is no scene configured
             animClass = self.state.animationClasses[self.state.scenes[self.state.activeSceneId].animationId]
             self.state.activeAnimation = animClass()
-            targetFps = min(self.config.maxFps, self.state.activeAnimation.maxFps)
+            targetFps = min( self.config.maxFps, self.state.activeAnimation.maxFps(), self.hwComm.maxFps() )
             if targetFps < 0:
                 targetFps = 0
             self.state.targetFps = targetFps
