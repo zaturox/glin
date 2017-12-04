@@ -19,11 +19,15 @@ features:
  * multiple ZeroMQ clients can be connected at the same time
  * talk to LED Strip via UDP
  * some sample animations (Static Color and Nova)
-
-upcoming features:
- * automatically detect and load supported animations via setuptools
- * load various backends for communicating with LED stripe (UDP, SPI,...)
+ * automatically detect and load supported animations
+ 
+partial implemented:
  * use configuration files for server side configuration
+ * load various backends for communicating with LED stripe (UDP, SPI,...)
+
+planned features:
+ * SPI backend, esp. for Raspberry Pi
+ * more animations
  
 dependencies:
  * Python 3 (Python 2 is not supported)

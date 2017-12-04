@@ -6,7 +6,7 @@ def readme():
         return f.read()
 
 setup(name='glin',
-      version='0.0.2',
+      version='0.0.3',
       long_description=readme(),
       description='Manages animations for LED stripes',
       url='http://github.com/zaturox/glin',
