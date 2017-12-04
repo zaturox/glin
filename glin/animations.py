@@ -1,34 +1,38 @@
 import numpy as np
 
 class AbstractAnimation:
-    name = "AbstractAnimation" # presentet to UI
+    """Base Class for animations"""
+    name = "AbstractAnimation" # Animation Name presentet to UI
     def __init__(self):
         pass
-
     def maxFps(self):
+        """report maximum available frames per second to glin core"""
         return float('inf') # unlimited, use system maxFps
-
     @staticmethod
     def checkConfig(config):
+        """Just check the given config, do not apply it. Report result to glin core."""
         return True
-
     def prepare(self, numLed, targetFps, config):
+        """setup animation"""
         self.numLed = numLed
         self.targetFps = targetFps
         self.config = config
-
     def nextFrame(self, buf):
+        """render next frame into data buffer"""
         pass
-
     def finish(self):
+        """Animation has stopped. Clean up."""
         pass
 
 class StaticColorAnimation(AbstractAnimation):
     name = "Static Color" # presentet to UI
+    def __init__(self):
+        super().__init__()
+        self.red = 1.0
+        self.green = 1.0
+        self.blue = 1.0
     def maxFps(self):
         return 0
-    #def __init__(self):
-    #    pass
     def prepare(self, numLed, targetFps, config):
         super().prepare(numLed, targetFps, config)
         import json
@@ -49,6 +53,8 @@ class StaticColorAnimation(AbstractAnimation):
 
 class NovaAnimation(AbstractAnimation):
     name = "Nova"
+    def __init__(self):
+        super().__init__()
     def maxFps(self):
         return 30
     class Nova:

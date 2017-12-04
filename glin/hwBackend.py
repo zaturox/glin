@@ -2,22 +2,30 @@ import socket
 import numpy as np
 
 class AbstractHwBackend:
+    """Base Class for hardware communication"""
     def __init__(self, numLed, config):
         pass
     def connect(self):
+        """Connect to target"""
         pass
     def switchOff(self):
+        """Turn LED stripe off. LEDs should not be on after this call"""
         pass
     def switchOn(self):
+        """turn hardware on, wait for data"""
         pass
     def send(self, data):
+        """send color data to LEDs"""
         pass
     def disconnect(self):
+        """Disconnect from target"""
         pass
     def maxFps(self):
+        """report maximum available frames per second to glin core"""
         return float('inf')
 
 class UDP(AbstractHwBackend):
+    """Communicate to LED Stripe via UDP"""
     def __init__(self, numLed, config):
         self.numLed = numLed
         self.host = config["host"]

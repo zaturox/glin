@@ -14,7 +14,15 @@ def boot():
     argparser = argparse.ArgumentParser(
         description="Controller for LED stripes (WS2801, WS2811 an similar)")
     argparser.add_argument("-c", "--config", metavar="CONFIGFILE", dest="configfiles", action='append', help='Configuration File. May be repeated multiple times. Later configuration files override previous ones.')
+    argparser.add_argument("-d", "--debug", dest="log_debug", action='store_const', const=True, help='Set log level to debug. Overrides -i/--info')
+    argparser.add_argument("-i", "--info",  dest="log_info",  action='store_const', const=True, help='Set log level to info.')
+
     args = argparser.parse_args()
+
+    if(args.log_debug):
+        logging.basicConfig(level=logging.DEBUG)
+    elif(args.log_info):
+        logging.basicConfig(level=logging.INFO)
 
     cfg = configparser.ConfigParser()
     cfgpath = os.path.join(os.path.dirname(__file__), "default.conf")
