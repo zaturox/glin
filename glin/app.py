@@ -169,7 +169,7 @@ class GlinApp:
 
     def _doNextFrame(self):
         if self.state.activeAnimation:
-            buf = np.zeros(3*self.numLed)
+            buf = np.zeros((self.numLed, 3))
             self.state.activeAnimation.nextFrame(buf)
             self.state._buf = np.copy(buf)
             self._sendFrame(buf)

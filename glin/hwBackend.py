@@ -38,7 +38,7 @@ class UDP(AbstractHwBackend):
     def switchOn(self):
         pass
     def send(self, data):
-        buf = (255*data).astype(np.uint8)
+        buf = (255*data).astype(np.uint8).flatten()
         self.sock.sendto(buf, (self.host, self.port))
     def disconnect(self):
         self.sock = None

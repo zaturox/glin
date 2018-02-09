@@ -47,9 +47,9 @@ class StaticColorAnimation(AbstractAnimation):
             self.blue = 1.0
 
     def nextFrame(self, buf):
-        buf[0::3] = np.ones(self.numLed) * self.red
-        buf[1::3] = np.ones(self.numLed) * self.green
-        buf[2::3] = np.ones(self.numLed) * self.blue
+        buf[:,0] = np.ones(self.numLed) * self.red
+        buf[:,1] = np.ones(self.numLed) * self.green
+        buf[:,2] = np.ones(self.numLed) * self.blue
 
 class NovaAnimation(AbstractAnimation):
     name = "Nova"
@@ -92,7 +92,7 @@ class NovaAnimation(AbstractAnimation):
         for nova in self.novas:
             nova.tick()
             nova.writeData(data)
-        buf[0:] = np.clip(data, 0, 255).astype(np.float64).flatten()/255
+        buf[:,:] = np.clip(data, 0, 255).astype(np.float64)/255
         for nova in self.novas:
             if nova.dead():
                 self.novas.remove(nova)
