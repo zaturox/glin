@@ -48,8 +48,9 @@ class GlinApp:
         brightness = min([1.0, max([brightness, 0.0])]) # enforces range 0 ... 1
         self.state.brightness = brightness
         self._repeatLastFrame()
-        self.zmqPublisher.publishBrightness(brightness)
+        seqNr = self.zmqPublisher.publishBrightness(brightness)
         logging.debug("Set brightness to {brightPercent:05.1f}%".format(brightPercent=brightness*100))
+        return (True, seqNr, "OK")
 
     def registerAnimation(self, animType):
         """Add a new animation"""
@@ -60,98 +61,115 @@ class GlinApp:
         """Add a new scene, returns Scene ID"""
         # check arguments
         if animationId < 0 or animationId >= len(self.state.animationClasses):
-            logging.info("Requested to register scene with invalid Animation ID. Out of range.")
-            return
+            err_msg = "Requested to register scene with invalid Animation ID. Out of range."
+            logging.info(err_msg)
+            return(False, 0, err_msg)
         if self.state.animationClasses[animationId].checkConfig(config) == False:
-            logging.info("Requested to register scene with invalid configuration.")
+            err_msg = "Requested to register scene with invalid configuration."
+            logging.info(err_msg)
+            return(False, 0, err_msg)
         self.state.sceneIdCtr += 1
         self.state.scenes[self.state.sceneIdCtr] = Scene(animationId, sceneName, color, velocity, config)
-        self.zmqPublisher.publishAddScene(self.state.sceneIdCtr, animationId, sceneName, color, velocity, config)
-        logging.debug("Registered new scene. ID: {sceneNum}".format(sceneNum=self.state.sceneIdCtr))
+        seqNr = self.zmqPublisher.publishAddScene(self.state.sceneIdCtr, animationId, sceneName, color, velocity, config)
+        logging.debug("Registered new scene.")
 
         # set this scene as active scene if none is configured yet
         if self.state.activeSceneId is None:
             self.setActiveScene(self.state.sceneIdCtr)
-        return self.state.sceneIdCtr
+        return (True, seqNr, "OK")
 
     def removeScene(self, sceneId):
         """remove a scene by Scene ID"""
         if self.state.activeSceneId == sceneId:
-            logging.info("Requested to delete scene {sceneNum}, which is currently active. Cannot delete active scene.".format(sceneNum=sceneId))
-            return
+            err_msg = "Requested to delete scene {sceneNum}, which is currently active. Cannot delete active scene.".format(sceneNum=sceneId)
+            logging.info(err_msg)
+            return(False, 0, err_msg)
         try:
             del self.state.scenes[sceneId]
             logging.debug("Deleted scene {sceneNum}".format(sceneNum=sceneId))
         except KeyError:
-            logging.info("Requested to delete scene {sceneNum}, which does not exist".format(sceneNum=sceneId))
-            return
+            err_msg = "Requested to delete scene {sceneNum}, which does not exist".format(sceneNum=sceneId)
+            logging.info(err_msg)
+            return(False, 0, err_msg)
         # if we are here, we deleted a scene, so publish it
-        self.zmqPublisher.publishRemoveScene(sceneId)
+        seqNr = self.zmqPublisher.publishRemoveScene(sceneId)
         logging.debug("Removed scene {sceneNum}".format(sceneNum=sceneId))
+        return (True, seqNr, "OK")
 
     def renameScene(self, sceneId, name):
         """rename a scene by scene ID"""
         if not sceneId in self.state.scenes: # does that sceneId exist?
-            logging.info("Requested to rename scene {sceneNum}, which does not exist".format(sceneNum=sceneId))
-            return
+            err_msg = "Requested to rename scene {sceneNum}, which does not exist".format(sceneNum=sceneId)
+            logging.info(err_msg)
+            return(False, 0, err_msg)
         self.state.scenes[sceneId] = self.state.scenes[sceneId]._replace(name=name) # TODO: is there a better solution?
-        self.zmqPublisher.publishRenameScene(sceneId, name)
+        seqNr = self.zmqPublisher.publishRenameScene(sceneId, name)
         logging.debug("Renamed scene {sceneNum}".format(sceneNum=sceneId))
+        return (True, seqNr, "OK")
 
     def reconfigScene(self, sceneId, config):
         """reconfigure a scene by scene ID"""
         if not sceneId in self.state.scenes: # does that sceneId exist?
-            logging.info("Requested to reconfigure scene {sceneNum}, which does not exist".format(sceneNum=sceneId))
-            return
+            err_msg = "Requested to reconfigure scene {sceneNum}, which does not exist".format(sceneNum=sceneId)
+            logging.info(err_msg)
+            return(False, 0, err_msg)
         if sceneId == self.state.activeSceneId:
             pass  # TODO: maybe calculate next frame, esp. if static scene
         self.state.scenes[sceneId] = self.state.scenes[sceneId]._replace(config=config)
-        self.zmqPublisher.publishReconfigScene(sceneId, config)
+        seqNr = self.zmqPublisher.publishReconfigScene(sceneId, config)
         logging.debug("Reconfigured scene {sceneNum}".format(sceneNum=sceneId))
+        return (True, seqNr, "OK")
 
     def recolorScene(self, sceneId, color):
         """reconfigure a scene by scene ID"""
         if not sceneId in self.state.scenes: # does that sceneId exist?
-            logging.info("Requested to recolor scene {sceneNum}, which does not exist".format(sceneNum=sceneId))
-            return
+            err_msg = "Requested to recolor scene {sceneNum}, which does not exist".format(sceneNum=sceneId)
+            logging.info(err_msg)
+            return(False, 0, err_msg)
         self.state.scenes[sceneId] = self.state.scenes[sceneId]._replace(color=color)
-        self.zmqPublisher.publishRecolorScene(sceneId, color)
+        seqNr = self.zmqPublisher.publishRecolorScene(sceneId, color)
         logging.debug("Recolored scene {sceneNum}".format(sceneNum=sceneId))
         if sceneId == self.state.activeSceneId:
             self.state.activeAnimation.setColor(color)
             self._doNextFrame() # TODO: make it more sensible, e.g. call only if static scene
+        return (True, seqNr, "OK")
 
     def velocityScene(self, sceneId, velocity):
         """reconfigure a scene by scene ID"""
         if not sceneId in self.state.scenes: # does that sceneId exist?
-            logging.info("Requested to set velocity on scene {sceneNum}, which does not exist".format(sceneNum=sceneId))
-            return
+            err_msg = "Requested to set velocity on scene {sceneNum}, which does not exist".format(sceneNum=sceneId)
+            logging.info(err_msg)
+            return(False, 0, err_msg)
         self.state.scenes[sceneId] = self.state.scenes[sceneId]._replace(velocity=velocity)
-        self.zmqPublisher.publishVelocityScene(sceneId, velocity)
+        seqNr = self.zmqPublisher.publishVelocityScene(sceneId, velocity)
         logging.debug("set velocity on scene {sceneNum}".format(sceneNum=sceneId))
         if sceneId == self.state.activeSceneId:
             self.state.activeAnimation.setVelocity(velocity)
             self._doNextFrame() # TODO: make it more sensible, e.g. call only if static scene
+        return (True, seqNr, "OK")
 
     def setActiveScene(self, sceneId):
         """sets the active scene by scene ID"""
         if self.state.activeSceneId != sceneId: # do nothing if scene has not changed
             self._deactivateScene()
-            self.zmqPublisher.publishActiveScene(sceneId)
+            seqNr = self.zmqPublisher.publishActiveScene(sceneId)
             self.state.activeSceneId = sceneId
             if self.state.mainswitch is True: # activate scene only if we are switched on
                 self._activateScene()
             logging.debug("Set scene {sceneNum} as active scene".format(sceneNum=sceneId))
+            return (True, seqNr, "OK")
         else:
             logging.debug("Scene {sceneNum} already is active scene".format(sceneNum=sceneId))
+            return (False, 0, "This already is the activated scene.")
 
     def setMainSwitch(self, state):
         """Turns output on or off. Also turns hardware on ir off"""
         if self.state.mainswitch == state:
-            logging.debug("MainSwitch unchanged, already is {sState}".format(sState="On" if state else "Off")) # fo obar lorem ipsum
-            return  # because nothing changed
+            err_msg = "MainSwitch unchanged, already is {sState}".format(sState="On" if state else "Off") # fo obar lorem ipsum
+            logging.debug(err_msg) # fo obar lorem ipsum
+            return (False, 0, err_msg) # because nothing changed
         self.state.mainswitch = state
-        self.zmqPublisher.publishMainSwitch(state)
+        seqNr = self.zmqPublisher.publishMainSwitch(state)
         logging.debug("MainSwitch toggled, new state is {sState}".format(sState="On" if state else "Off")) # fo obar lorem ipsum
         if state is True:
             self.hwComm.switchOn()
@@ -159,6 +177,7 @@ class GlinApp:
         else:
             self._deactivateScene()
             self.hwComm.switchOff()
+        return (True, seqNr, "OK")
 
     def _activateScene(self):
         if self.state.activeSceneId in self.state.scenes: # is sceneId valid? if not, assume there is no scene configured
@@ -188,7 +207,7 @@ class GlinApp:
 
     def toggleMainSwitch(self):
         """Toggles the mainswitch state"""
-        self.setMainSwitch(not self.state.mainswitch)
+        return self.setMainSwitch(not self.state.mainswitch)
 
     def _on_nextFrame(self):
         logging.debug("generating next frame")
@@ -246,31 +265,40 @@ class GlinAppZmqPublisher:
     def publishBrightness(self, brightness):
         self.seqNr += 1
         self.publisher.send_multipart([b"brightness", pack("!Q", self.seqNr), pack("B", int(brightness*255))])
+        return self.seqNr
     def publishMainSwitch(self, state):
         self.seqNr += 1
         self.publisher.send_multipart([b"mainswitch.state", pack("!Q", self.seqNr), b"\x01" if state else b"\x00"])
+        return self.seqNr
     def publishActiveScene(self, sceneId):
         self.seqNr += 1
         self.publisher.send_multipart([b"scene.setactive", pack("!Q", self.seqNr), pack("!I", sceneId)])
+        return self.seqNr
     def publishAddScene(self, sceneId, animationId, name, color, velocity, config):
         self.seqNr += 1
         (red, green, blue) = (int(color[0]*255),int(color[1]*255),int(color[2]*255))
         self.publisher.send_multipart([b"scene.add", pack("!Q", self.seqNr), pack("!I", sceneId), pack("!I", animationId), name.encode('utf-8'), pack("BBB", red, green, blue), pack("!I", int(velocity * 1000)), config.encode('utf-8')])
+        return self.seqNr
     def publishRemoveScene(self, sceneId):
         self.seqNr += 1
         self.publisher.send_multipart([b"scene.rm", pack("!Q", self.seqNr), pack("!I", sceneId)])
+        return self.seqNr
     def publishRenameScene(self, sceneId, name):
         self.seqNr += 1
         self.publisher.send_multipart([b"scene.name", pack("!Q", self.seqNr), pack("!I", sceneId), name.encode('utf-8')])
+        return self.seqNr
     def publishReconfigScene(self, sceneId, config):
         self.seqNr += 1
         self.publisher.send_multipart([b"scene.config", pack("!Q", self.seqNr), pack("!I", sceneId), config.encode('utf-8')])
+        return self.seqNr
     def publishRecolorScene(self, sceneId, color):
         self.seqNr += 1
         self.publisher.send_multipart([b"scene.color", pack("!Q", self.seqNr), pack("!I", sceneId), pack("BBB", int(color[0]*255), int(color[1]*255), int(color[2]*255))])
+        return self.seqNr
     def publishVelocityScene(self, sceneId, velocity):
         self.seqNr += 1
         self.publisher.send_multipart([b"scene.velocity", pack("!Q", self.seqNr), pack("!I", sceneId), pack("!I", int(velocity*1000))])
+        return self.seqNr
 
     def handle_snapshot(self, msg):
         """Handles a snapshot request"""
@@ -291,56 +319,62 @@ class GlinAppZmqCollector:
         self.app = app
         self.ctx = ctx
 
-        self.collector = self.ctx.socket(zmq.PULL)
+        self.collector = self.ctx.socket(zmq.REP)
         self.collector.bind("tcp://*:" + str(port))
         self.collector = ZMQStream(self.collector)
         self.collector.on_recv(self.handle_collect)
 
     def handle_collect(self, msg):
+        (success, seqNr, comment) = self._handle_collect(msg)
+        self.collector.send_multipart([b"\x01" if success else b"\x00", pack("!I", seqNr), comment.encode("utf-8")])
+
+    def _handle_collect(self, msg):
         """Handle incoming message"""
         try:
             if len(msg) < 1:
-                logging.info("Got empty message. Ignoring.")
-                return
+                err_msg = "Got empty message. Ignoring."
+                logging.info(err_msg)
+                return(False, 0, err_msg)
             if msg[0] == b"brightness":
-                self._handle_collect_brightness(msg)
+                return self._handle_collect_brightness(msg)
 
             # "mainswitch.state" <bool>
             elif msg[0] == b"mainswitch.state":
-                self._handle_collect_mainswitch_state(msg)
+                return self._handle_collect_mainswitch_state(msg)
 
             # "mainswitch.toogle"
             elif msg[0] == b"mainswitch.toggle":
-                self._handle_collect_mainswitch_toggle(msg)
+                return self._handle_collect_mainswitch_toggle(msg)
 
             # "scene.add" <animationId> <name> <config>
             elif(msg[0] == b"scene.add"):
-                self._handle_collect_scene_add(msg)
+                return self._handle_collect_scene_add(msg)
 
             # "scene.config" <sceneId> <config>
             elif msg[0] == b"scene.config":
-                self._handle_collect_scene_reconfig(msg)
+                return self._handle_collect_scene_reconfig(msg)
 
             elif msg[0] == b"scene.color":
-                self._handle_collect_scene_recolor(msg)
+                return self._handle_collect_scene_recolor(msg)
 
             elif msg[0] == b"scene.velocity":
-                self._handle_collect_scene_velocity(msg)
+                return self._handle_collect_scene_velocity(msg)
 
             # "scene.name" <sceneId> <name>
             elif msg[0] == b"scene.name":
-                self._handle_collect_scene_rename(msg)
+                return self._handle_collect_scene_rename(msg)
 
             # "scene.rm" <sceneId>
             elif msg[0] == b"scene.rm":
-                self._handle_collect_scene_rm(msg)
+                return self._handle_collect_scene_rm(msg)
 
             # "scene.setactive" <sceneId>
             elif msg[0] == b"scene.setactive":
-                self._handle_collect_scene_setactive(msg)
+                return self._handle_collect_scene_setactive(msg)
 
             else:
                 logging.info("Invalid Command: {cmd}".format(cmd=(msg[0].decode('utf-8', 'replace'))))
+                return (False, 0, "Invalid Command")
 
         except Exception as inst:
             logging.error(inst)
@@ -348,136 +382,165 @@ class GlinAppZmqCollector:
 
     def _handle_collect_brightness(self, msg):
         if len(msg) != 2:
-            logging.info("Invalid brightness message. Expected 2 frames")
-            return
+            err_msg = "Invalid brightness message. Expected 2 frames"
+            logging.info(err_msg)
+            return (False, 0, )
         if len(msg[1]) != 1:
-            logging.info("Invalid brightness message. Parameter must be exactly 1 Byte")
-            return
-        self.app.setBrightness(msg[1][0]/255)
+            err_msg = "Invalid brightness message. Parameter must be exactly 1 Byte"
+            logging.info(err_msg)
+            return(False, 0, err_msg)
+        return self.app.setBrightness(msg[1][0]/255)
 
     def _handle_collect_mainswitch_state(self, msg):
         # "mainswitch.state" <bool>
         if len(msg) != 2:
-            logging.info("Invalid mainswitch.state message. Expected 2 frames")
-            return
+            err_msg = "Invalid mainswitch.state message. Expected 2 frames"
+            logging.info(err_msg)
+            return (False, 0, err_msg)
         if len(msg[1]) != 1:
-            logging.info("Invalid mainswitch.state message. Parameter must be exactly 1 Byte")
-            return
+            err_msg = "Invalid mainswitch.state message. Parameter must be exactly 1 Byte"
+            logging.info(err_msg)
+            return (False, 0, err_msg)
         if msg[1] == b"\x00":
-            self.app.setMainSwitch(False)
+            return self.app.setMainSwitch(False)
         else:
-            self.app.setMainSwitch(True)
+            return self.app.setMainSwitch(True)
 
     def _handle_collect_mainswitch_toggle(self, msg):
         # "mainswitch.toggle"
         if len(msg) != 1:
-            logging.info("Invalid mainswitch.toggle message. Expected 1 frame")
-            return
-        self.app.toggleMainSwitch()
+            err_msg = "Invalid mainswitch.toggle message. Expected 1 frame"
+            logging.info(err_msg)
+            return (False, 0, err_msg)
+        return self.app.toggleMainSwitch()
 
     def _handle_collect_scene_add(self, msg):
         # "scene.add" <animationId> <name> <color> <velocity> <config>
         if len(msg) != 5 and len(msg) != 6:
-            logging.info("Invalid scene.add message. Expected 5 or 6 frames, got " + str(len(msg)))
-            return
+            err_msg = "Invalid scene.add message. Expected 5 or 6 frames, got " + str(len(msg))
+            logging.info(err_msg)
+            return(False, 0, err_msg)
         if len(msg[1]) != 4:
-            logging.info("Invalid scene.add message. AnimationId should be exactly 4 Bytes")
-            return
+            err_msg = "Invalid scene.add message. AnimationId should be exactly 4 Bytes"
+            logging.info(err_msg)
+            return(False, 0, err_msg)
         if len(msg[3]) != 3:
-            logging.info("Invalid scene.add message. Color should be exactly 3 Bytes")
-            return
+            err_msg = "Invalid scene.add message. Color should be exactly 3 Bytes"
+            logging.info(err_msg)
+            return(False, 0, err_msg)
         if len(msg[4]) != 4:
-            logging.info("Invalid scene.add message. Color should be exactly 4 Bytes")
-            return
+            err_msg = "Invalid scene.add message. Color should be exactly 4 Bytes"
+            logging.info(err_msg)
+            return(False, 0, err_msg)
         (animId,) = unpack("!I", msg[1])
         color = self._parse_color(msg[3])
         (velocity,) = unpack("!I", msg[4])
         try:
             config = msg[5].decode('utf-8') if len(msg) == 6 else "" # config ist optional
-            self.app.registerScene(animId, msg[2].decode('utf-8'), color, velocity/1000, config)
+            return self.app.registerScene(animId, msg[2].decode('utf-8'), color, velocity/1000, config)
         except UnicodeDecodeError:
-            logging.info("Invalid scene.add message. Contained invalid Unicode Characters.")
+            err_msg = "Invalid scene.add message. Contained invalid Unicode Characters."
+            logging.info(err_msg)
+            return(False, 0, err_msg)
 
     def _handle_collect_scene_recolor(self, msg):
         # "scene.config" <sceneId> <color>
         if len(msg) != 3:
-            logging.info("Invalid scene.color message. Expected 3 frames")
-            return
+            err_msg = "Invalid scene.color message. Expected 3 frames"
+            logging.info(err_msg)
+            return(False, 0, err_msg)
         if len(msg[1]) != 4:
-            logging.info("Invalid scene.color message. SceneId should be exactly 4 Bytes")
-            return
+            err_msg = "Invalid scene.color message. SceneId should be exactly 4 Bytes"
+            logging.info(err_msg)
+            return(False, 0, err_msg)
         if len(msg[2]) != 3:
-            logging.info("Invalid scene.color message. Color should be exactly 3 Bytes")
-            return
+            err_msg = "Invalid scene.color message. Color should be exactly 3 Bytes"
+            logging.info(err_msg)
+            return(False, 0, err_msg)
         (sceneId,) = unpack("!I", msg[1])
         color = self._parse_color(msg[2])
-        self.app.recolorScene(sceneId, color)
+        return self.app.recolorScene(sceneId, color)
 
     def _handle_collect_scene_velocity(self, msg):
         # "scene.config" <sceneId> <color>
         if len(msg) != 3:
-            logging.info("Invalid scene.velocity message. Expected 3 frames")
-            return
+            err_msg = "Invalid scene.velocity message. Expected 3 frames"
+            logging.info(err_msg)
+            return(False, 0, err_msg)
         if len(msg[1]) != 4:
-            logging.info("Invalid scene.velocity message. SceneId should be exactly 4 Bytes")
-            return
+            err_msg = "Invalid scene.velocity message. SceneId should be exactly 4 Bytes"
+            logging.info(err_msg)
+            return(False, 0, err_msg)
         if len(msg[2]) != 4:
-            logging.info("Invalid scene.velocity message. Velocity should be exactly 4 Bytes")
-            return
+            err_msg = "Invalid scene.velocity message. Velocity should be exactly 4 Bytes"
+            logging.info(err_msg)
+            return(False, 0, err_msg)
         (sceneId,) = unpack("!I", msg[1])
         (velocity,) = unpack("!I", msg[2])
-        self.app.velocityScene(sceneId, velocity/1000)
+        return self.app.velocityScene(sceneId, velocity/1000)
 
     def _handle_collect_scene_reconfig(self, msg):
         # "scene.config" <sceneId> <config>
         if len(msg) != 3:
-            logging.info("Invalid scene.config message. Expected 3 frames")
-            return
+            err_msg = "Invalid scene.config message. Expected 3 frames"
+            logging.info(err_msg)
+            return(False, 0, err_msg)
         if len(msg[1]) != 4:
-            logging.info("Invalid scene.config message. SceneId should be exactly 4 Bytes")
-            return
+            err_msg = "Invalid scene.config message. SceneId should be exactly 4 Bytes"
+            logging.info(err_msg)
+            return(False, 0, err_msg)
         (sceneId,) = unpack("!I", msg[1])
         try:
-            self.app.reconfigScene(sceneId, msg[2].decode('utf-8'))
+            return self.app.reconfigScene(sceneId, msg[2].decode('utf-8'))
         except UnicodeDecodeError:
-            logging.info("Invalid scene.config message. Configuration contained invalid Unicode Characters.")
+            err_msg = "Invalid scene.config message. Configuration contained invalid Unicode Characters."
+            logging.info(err_msg)
+            return(False, 0, err_msg)
 
 
     def _handle_collect_scene_rename(self, msg):
         # "scene.name" <sceneId> <name>
         if len(msg) != 3:
-            logging.info("Invalid scene.name message. Expected 3 frames")
-            return
+            err_msg = "Invalid scene.name message. Expected 3 frames"
+            logging.info(err_msg)
+            return(False, 0, err_msg)
         if len(msg[1]) != 4:
-            logging.info("Invalid scene.name message. SceneId should be exactly 4 Bytes")
-            return
+            err_msg = "Invalid scene.name message. SceneId should be exactly 4 Bytes"
+            logging.info(err_msg)
+            return(False, 0, err_msg)
         (sceneId,) = unpack("!I", msg[1])
         try:
-            self.app.renameScene(sceneId, msg[2].decode('utf-8'))
+            return self.app.renameScene(sceneId, msg[2].decode('utf-8'))
         except UnicodeDecodeError:
-            logging.info("Invalid scene.name message. Name contained invalid Unicode Characters.")
+            err_msg = "Invalid scene.name message. Name contained invalid Unicode Characters."
+            logging.info(err_msg)
+            return(False, 0, err_msg)
 
     def _handle_collect_scene_rm(self, msg):
         # "scene.rm" <sceneId>
         if len(msg) != 2:
-            logging.info("Invalid scene.rm message. Expected 2 frames")
-            return
+            err_msg = "Invalid scene.rm message. Expected 2 frames"
+            logging.info(err_msg)
+            return(False, 0, err_msg)
         if len(msg[1]) != 4:
-            logging.info("Invalid scene.rm message. SceneId should be exactly 4 Bytes")
-            return
+            err_msg = "Invalid scene.rm message. SceneId should be exactly 4 Bytes"
+            logging.info(err_msg)
+            return(False, 0, err_msg)
         (sceneId,) = unpack("!I", msg[1])
-        self.app.removeScene(sceneId)
+        return self.app.removeScene(sceneId)
 
     def _handle_collect_scene_setactive(self, msg):
         # "scene.setactive" <sceneId>
         if len(msg) != 2:
-            logging.info("Invalid scene.setactive message. Expected 2 frames, got " + str(len(msg)))
-            return
+            err_msg = "Invalid scene.setactive message. Expected 2 frames, got " + str(len(msg))
+            logging.info(err_msg)
+            return(False, 0, err_msg)
         if len(msg[1]) != 4:
-            logging.info("Invalid scene.setactive message. SceneId should be exactly 4 Bytes")
-            return
+            err_msg = "Invalid scene.setactive message. SceneId should be exactly 4 Bytes"
+            logging.info(err_msg)
+            return(False, 0, err_msg)
         (sceneId,) = unpack("!I", msg[1])
-        self.app.setActiveScene(sceneId)
+        return self.app.setActiveScene(sceneId)
 
     def _parse_color(self, msg):
         (red, green, blue,) = unpack("BBB", msg)
