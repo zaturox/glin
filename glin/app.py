@@ -11,6 +11,8 @@ import zmq
 from zmq.eventloop.ioloop import IOLoop, PeriodicCallback
 from zmq.eventloop.zmqstream import ZMQStream
 
+from glin.zmq.messages import MessageBuilder, MessageWriter
+
 Scene = namedtuple('Scene', 'animationId name color velocity config')
 
 class GlinApp:
@@ -264,54 +266,52 @@ class GlinAppZmqPublisher:
 
     def publishBrightness(self, brightness):
         self.seqNr += 1
-        self.publisher.send_multipart([b"brightness", pack("!Q", self.seqNr), pack("B", int(brightness*255))])
+        self.publisher.send_multipart(MessageBuilder.brightness(self.seqNr, brightness))
         return self.seqNr
     def publishMainSwitch(self, state):
         self.seqNr += 1
-        self.publisher.send_multipart([b"mainswitch.state", pack("!Q", self.seqNr), b"\x01" if state else b"\x00"])
+        self.publisher.send_multipart(MessageBuilder.mainswitch(self.seqNr, state))
         return self.seqNr
     def publishActiveScene(self, sceneId):
         self.seqNr += 1
-        self.publisher.send_multipart([b"scene.setactive", pack("!Q", self.seqNr), pack("!I", sceneId)])
+        self.publisher.send_multipart(MessageBuilder.sceneActive(self.seqNr, sceneId))
         return self.seqNr
     def publishAddScene(self, sceneId, animationId, name, color, velocity, config):
         self.seqNr += 1
-        (red, green, blue) = (int(color[0]*255),int(color[1]*255),int(color[2]*255))
-        self.publisher.send_multipart([b"scene.add", pack("!Q", self.seqNr), pack("!I", sceneId), pack("!I", animationId), name.encode('utf-8'), pack("BBB", red, green, blue), pack("!I", int(velocity * 1000)), config.encode('utf-8')])
+        self.publisher.send_multipart(MessageBuilder.sceneAdd(self.seqNr, sceneId, animationId, name, color, velocity, config))
         return self.seqNr
     def publishRemoveScene(self, sceneId):
         self.seqNr += 1
-        self.publisher.send_multipart([b"scene.rm", pack("!Q", self.seqNr), pack("!I", sceneId)])
+        self.publisher.send_multipart(MessageBuilder.sceneRemove(self.seqNr, sceneId))
         return self.seqNr
     def publishRenameScene(self, sceneId, name):
         self.seqNr += 1
-        self.publisher.send_multipart([b"scene.name", pack("!Q", self.seqNr), pack("!I", sceneId), name.encode('utf-8')])
+        self.publisher.send_multipart(MessageBuilder.sceneName(self.seqNr, sceneId, name))
         return self.seqNr
     def publishReconfigScene(self, sceneId, config):
         self.seqNr += 1
-        self.publisher.send_multipart([b"scene.config", pack("!Q", self.seqNr), pack("!I", sceneId), config.encode('utf-8')])
+        self.publisher.send_multipart(MessageBuilder.sceneConfig(self.seqNr, sceneId, config))
         return self.seqNr
     def publishRecolorScene(self, sceneId, color):
         self.seqNr += 1
-        self.publisher.send_multipart([b"scene.color", pack("!Q", self.seqNr), pack("!I", sceneId), pack("BBB", int(color[0]*255), int(color[1]*255), int(color[2]*255))])
+        self.publisher.send_multipart(MessageBuilder.sceneColor(self.seqNr, sceneId, color))
         return self.seqNr
     def publishVelocityScene(self, sceneId, velocity):
         self.seqNr += 1
-        self.publisher.send_multipart([b"scene.velocity", pack("!Q", self.seqNr), pack("!I", sceneId), pack("!I", int(velocity*1000))])
+        self.publisher.send_multipart(MessageBuilder.sceneVelocity(self.seqNr, sceneId, velocity))
         return self.seqNr
 
     def handle_snapshot(self, msg):
         """Handles a snapshot request"""
         logging.debug("Sending state snapshot request")
         identity = msg[0]
-        self.snapshot.send_multipart([identity, b"mainswitch.state", pack("!Q", self.seqNr), b"\x01" if self.app.state.mainswitch else b"\x00"])
-        self.snapshot.send_multipart([identity, b"brightness", pack("!Q", self.seqNr), pack("B", int(255*self.app.state.brightness))])
-        for animId,  anim  in enumerate(self.app.state.animationClasses):
-            self.snapshot.send_multipart([identity, b"animation.add", pack("!Q", self.seqNr), pack("!I", animId), anim.name.encode('utf-8')])
+        self.snapshot.send_multipart([identity] + MessageBuilder.mainswitch(self.seqNr, self.app.state.mainswitch))
+        self.snapshot.send_multipart([identity] + MessageBuilder.brightness(self.seqNr, self.app.state.brightness))
+        for animId, anim  in enumerate(self.app.state.animationClasses):
+            self.snapshot.send_multipart([identity] + MessageBuilder.animationAdd(self.seqNr, animId, anim.name))
         for sceneId, scene in self.app.state.scenes.items():
-            (red, green, blue) = (int(scene.color[0]*255),int(scene.color[1]*255),int(scene.color[2]*255))
-            self.snapshot.send_multipart([identity, b"scene.add", pack("!Q", self.seqNr), pack("!I", sceneId), pack("!I", scene.animationId), scene.name.encode('utf-8'), pack("BBB", red, green, blue), pack("!I", int(scene.velocity * 1000)), scene.config.encode('utf-8')])
-        self.snapshot.send_multipart([identity, b"scene.setactive", pack("!Q", self.seqNr), pack("!I", 0 if self.app.state.activeSceneId is None else self.app.state.activeSceneId)])
+            self.snapshot.send_multipart([identity] + MessageBuilder.sceneAdd(self.seqNr, sceneId, scene.animationId, scene.name, scene.color, scene.velocity, scene.config))
+        self.snapshot.send_multipart([identity] + MessageBuilder.sceneActive(self.seqNr, 0 if self.app.state.activeSceneId is None else self.app.state.activeSceneId))
 
 
 class GlinAppZmqCollector:
@@ -326,7 +326,7 @@ class GlinAppZmqCollector:
 
     def handle_collect(self, msg):
         (success, seqNr, comment) = self._handle_collect(msg)
-        self.collector.send_multipart([b"\x01" if success else b"\x00", pack("!I", seqNr), comment.encode("utf-8")])
+        self.collector.send_multipart(MessageWriter().bool(success).uint64(seqNr).string(comment).get())
 
     def _handle_collect(self, msg):
         """Handle incoming message"""
