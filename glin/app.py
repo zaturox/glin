@@ -11,7 +11,7 @@ import zmq
 from zmq.eventloop.ioloop import IOLoop, PeriodicCallback
 from zmq.eventloop.zmqstream import ZMQStream
 
-from glin.zmq.messages import MessageBuilder, MessageWriter
+import glin.zmq.messages as msgs
 
 Scene = namedtuple('Scene', 'animationId name color velocity config')
 
@@ -266,52 +266,52 @@ class GlinAppZmqPublisher:
 
     def publishBrightness(self, brightness):
         self.seqNr += 1
-        self.publisher.send_multipart(MessageBuilder.brightness(self.seqNr, brightness))
+        self.publisher.send_multipart(msgs.MessageBuilder.brightness(self.seqNr, brightness))
         return self.seqNr
     def publishMainSwitch(self, state):
         self.seqNr += 1
-        self.publisher.send_multipart(MessageBuilder.mainswitch(self.seqNr, state))
+        self.publisher.send_multipart(msgs.MessageBuilder.mainswitch(self.seqNr, state))
         return self.seqNr
     def publishActiveScene(self, sceneId):
         self.seqNr += 1
-        self.publisher.send_multipart(MessageBuilder.sceneActive(self.seqNr, sceneId))
+        self.publisher.send_multipart(msgs.MessageBuilder.sceneActive(self.seqNr, sceneId))
         return self.seqNr
     def publishAddScene(self, sceneId, animationId, name, color, velocity, config):
         self.seqNr += 1
-        self.publisher.send_multipart(MessageBuilder.sceneAdd(self.seqNr, sceneId, animationId, name, color, velocity, config))
+        self.publisher.send_multipart(msgs.MessageBuilder.sceneAdd(self.seqNr, sceneId, animationId, name, color, velocity, config))
         return self.seqNr
     def publishRemoveScene(self, sceneId):
         self.seqNr += 1
-        self.publisher.send_multipart(MessageBuilder.sceneRemove(self.seqNr, sceneId))
+        self.publisher.send_multipart(msgs.MessageBuilder.sceneRemove(self.seqNr, sceneId))
         return self.seqNr
     def publishRenameScene(self, sceneId, name):
         self.seqNr += 1
-        self.publisher.send_multipart(MessageBuilder.sceneName(self.seqNr, sceneId, name))
+        self.publisher.send_multipart(msgs.MessageBuilder.sceneName(self.seqNr, sceneId, name))
         return self.seqNr
     def publishReconfigScene(self, sceneId, config):
         self.seqNr += 1
-        self.publisher.send_multipart(MessageBuilder.sceneConfig(self.seqNr, sceneId, config))
+        self.publisher.send_multipart(msgs.MessageBuilder.sceneConfig(self.seqNr, sceneId, config))
         return self.seqNr
     def publishRecolorScene(self, sceneId, color):
         self.seqNr += 1
-        self.publisher.send_multipart(MessageBuilder.sceneColor(self.seqNr, sceneId, color))
+        self.publisher.send_multipart(msgs.MessageBuilder.sceneColor(self.seqNr, sceneId, color))
         return self.seqNr
     def publishVelocityScene(self, sceneId, velocity):
         self.seqNr += 1
-        self.publisher.send_multipart(MessageBuilder.sceneVelocity(self.seqNr, sceneId, velocity))
+        self.publisher.send_multipart(msgs.MessageBuilder.sceneVelocity(self.seqNr, sceneId, velocity))
         return self.seqNr
 
     def handle_snapshot(self, msg):
         """Handles a snapshot request"""
         logging.debug("Sending state snapshot request")
         identity = msg[0]
-        self.snapshot.send_multipart([identity] + MessageBuilder.mainswitch(self.seqNr, self.app.state.mainswitch))
-        self.snapshot.send_multipart([identity] + MessageBuilder.brightness(self.seqNr, self.app.state.brightness))
+        self.snapshot.send_multipart([identity] + msgs.MessageBuilder.mainswitch(self.seqNr, self.app.state.mainswitch))
+        self.snapshot.send_multipart([identity] + msgs.MessageBuilder.brightness(self.seqNr, self.app.state.brightness))
         for animId, anim  in enumerate(self.app.state.animationClasses):
-            self.snapshot.send_multipart([identity] + MessageBuilder.animationAdd(self.seqNr, animId, anim.name))
+            self.snapshot.send_multipart([identity] + msgs.MessageBuilder.animationAdd(self.seqNr, animId, anim.name))
         for sceneId, scene in self.app.state.scenes.items():
-            self.snapshot.send_multipart([identity] + MessageBuilder.sceneAdd(self.seqNr, sceneId, scene.animationId, scene.name, scene.color, scene.velocity, scene.config))
-        self.snapshot.send_multipart([identity] + MessageBuilder.sceneActive(self.seqNr, 0 if self.app.state.activeSceneId is None else self.app.state.activeSceneId))
+            self.snapshot.send_multipart([identity] + msgs.MessageBuilder.sceneAdd(self.seqNr, sceneId, scene.animationId, scene.name, scene.color, scene.velocity, scene.config))
+        self.snapshot.send_multipart([identity] + msgs.MessageBuilder.sceneActive(self.seqNr, 0 if self.app.state.activeSceneId is None else self.app.state.activeSceneId))
 
 
 class GlinAppZmqCollector:
@@ -326,7 +326,7 @@ class GlinAppZmqCollector:
 
     def handle_collect(self, msg):
         (success, seqNr, comment) = self._handle_collect(msg)
-        self.collector.send_multipart(MessageWriter().bool(success).uint64(seqNr).string(comment).get())
+        self.collector.send_multipart(msgs.MessageWriter().bool(success).uint64(seqNr).string(comment).get())
 
     def _handle_collect(self, msg):
         """Handle incoming message"""
@@ -393,18 +393,13 @@ class GlinAppZmqCollector:
 
     def _handle_collect_mainswitch_state(self, msg):
         # "mainswitch.state" <bool>
-        if len(msg) != 2:
-            err_msg = "Invalid mainswitch.state message. Expected 2 frames"
+        try:
+            (state,) = msgs.MessageParser.mainswitch(msg)
+            return self.app.setMainSwitch(state)
+        except msgs.MessageParserError as err:
+            err_msg = str(err)
             logging.info(err_msg)
             return (False, 0, err_msg)
-        if len(msg[1]) != 1:
-            err_msg = "Invalid mainswitch.state message. Parameter must be exactly 1 Byte"
-            logging.info(err_msg)
-            return (False, 0, err_msg)
-        if msg[1] == b"\x00":
-            return self.app.setMainSwitch(False)
-        else:
-            return self.app.setMainSwitch(True)
 
     def _handle_collect_mainswitch_toggle(self, msg):
         # "mainswitch.toggle"
@@ -416,133 +411,70 @@ class GlinAppZmqCollector:
 
     def _handle_collect_scene_add(self, msg):
         # "scene.add" <animationId> <name> <color> <velocity> <config>
-        if len(msg) != 5 and len(msg) != 6:
-            err_msg = "Invalid scene.add message. Expected 5 or 6 frames, got " + str(len(msg))
-            logging.info(err_msg)
-            return(False, 0, err_msg)
-        if len(msg[1]) != 4:
-            err_msg = "Invalid scene.add message. AnimationId should be exactly 4 Bytes"
-            logging.info(err_msg)
-            return(False, 0, err_msg)
-        if len(msg[3]) != 3:
-            err_msg = "Invalid scene.add message. Color should be exactly 3 Bytes"
-            logging.info(err_msg)
-            return(False, 0, err_msg)
-        if len(msg[4]) != 4:
-            err_msg = "Invalid scene.add message. Color should be exactly 4 Bytes"
-            logging.info(err_msg)
-            return(False, 0, err_msg)
-        (animId,) = unpack("!I", msg[1])
-        color = self._parse_color(msg[3])
-        (velocity,) = unpack("!I", msg[4])
         try:
-            config = msg[5].decode('utf-8') if len(msg) == 6 else "" # config ist optional
-            return self.app.registerScene(animId, msg[2].decode('utf-8'), color, velocity/1000, config)
-        except UnicodeDecodeError:
-            err_msg = "Invalid scene.add message. Contained invalid Unicode Characters."
+            (animId, name, color, velocity, config) = msgs.MessageParser.sceneAdd(msg)
+            return self.app.registerScene(animId, name, color, velocity, config)
+        except msgs.MessageParserError as err:
+            err_msg = str(err)
             logging.info(err_msg)
-            return(False, 0, err_msg)
+            return (False, 0, err_msg)
 
     def _handle_collect_scene_recolor(self, msg):
-        # "scene.config" <sceneId> <color>
-        if len(msg) != 3:
-            err_msg = "Invalid scene.color message. Expected 3 frames"
+        # "scene.color" <sceneId> <color>
+        try:
+            (sceneId, color) = msgs.MessageParser.sceneColor(msg)
+            return self.app.recolorScene(sceneId, color)
+        except msgs.MessageParserError as err:
+            err_msg = str(err)
             logging.info(err_msg)
-            return(False, 0, err_msg)
-        if len(msg[1]) != 4:
-            err_msg = "Invalid scene.color message. SceneId should be exactly 4 Bytes"
-            logging.info(err_msg)
-            return(False, 0, err_msg)
-        if len(msg[2]) != 3:
-            err_msg = "Invalid scene.color message. Color should be exactly 3 Bytes"
-            logging.info(err_msg)
-            return(False, 0, err_msg)
-        (sceneId,) = unpack("!I", msg[1])
-        color = self._parse_color(msg[2])
-        return self.app.recolorScene(sceneId, color)
+            return (False, 0, err_msg)
 
     def _handle_collect_scene_velocity(self, msg):
-        # "scene.config" <sceneId> <color>
-        if len(msg) != 3:
-            err_msg = "Invalid scene.velocity message. Expected 3 frames"
+        # "scene.velocity" <sceneId> <velocity>
+        try:
+            (sceneId, velocity) = msgs.MessageParser.sceneVelocity(msg)
+            return self.app.velocityScene(sceneId, velocity)
+        except msgs.MessageParserError as err:
+            err_msg = str(err)
             logging.info(err_msg)
-            return(False, 0, err_msg)
-        if len(msg[1]) != 4:
-            err_msg = "Invalid scene.velocity message. SceneId should be exactly 4 Bytes"
-            logging.info(err_msg)
-            return(False, 0, err_msg)
-        if len(msg[2]) != 4:
-            err_msg = "Invalid scene.velocity message. Velocity should be exactly 4 Bytes"
-            logging.info(err_msg)
-            return(False, 0, err_msg)
-        (sceneId,) = unpack("!I", msg[1])
-        (velocity,) = unpack("!I", msg[2])
-        return self.app.velocityScene(sceneId, velocity/1000)
+            return (False, 0, err_msg)
 
     def _handle_collect_scene_reconfig(self, msg):
         # "scene.config" <sceneId> <config>
-        if len(msg) != 3:
-            err_msg = "Invalid scene.config message. Expected 3 frames"
-            logging.info(err_msg)
-            return(False, 0, err_msg)
-        if len(msg[1]) != 4:
-            err_msg = "Invalid scene.config message. SceneId should be exactly 4 Bytes"
-            logging.info(err_msg)
-            return(False, 0, err_msg)
-        (sceneId,) = unpack("!I", msg[1])
         try:
-            return self.app.reconfigScene(sceneId, msg[2].decode('utf-8'))
-        except UnicodeDecodeError:
-            err_msg = "Invalid scene.config message. Configuration contained invalid Unicode Characters."
+            (sceneId, config) = msgs.MessageParser.sceneConfig(msg)
+            return self.app.reconfigScene(sceneId, config)
+        except msgs.MessageParserError as err:
+            err_msg = str(err)
             logging.info(err_msg)
-            return(False, 0, err_msg)
-
+            return (False, 0, err_msg)
 
     def _handle_collect_scene_rename(self, msg):
         # "scene.name" <sceneId> <name>
-        if len(msg) != 3:
-            err_msg = "Invalid scene.name message. Expected 3 frames"
-            logging.info(err_msg)
-            return(False, 0, err_msg)
-        if len(msg[1]) != 4:
-            err_msg = "Invalid scene.name message. SceneId should be exactly 4 Bytes"
-            logging.info(err_msg)
-            return(False, 0, err_msg)
-        (sceneId,) = unpack("!I", msg[1])
         try:
-            return self.app.renameScene(sceneId, msg[2].decode('utf-8'))
-        except UnicodeDecodeError:
-            err_msg = "Invalid scene.name message. Name contained invalid Unicode Characters."
+            (sceneId, name) = msgs.MessageParser.sceneName(msg)
+            return self.app.renameScene(sceneId, name)
+        except msgs.MessageParserError as err:
+            err_msg = str(err)
             logging.info(err_msg)
-            return(False, 0, err_msg)
+            return (False, 0, err_msg)
 
     def _handle_collect_scene_rm(self, msg):
         # "scene.rm" <sceneId>
-        if len(msg) != 2:
-            err_msg = "Invalid scene.rm message. Expected 2 frames"
+        try:
+            (sceneId,) = msgs.MessageParser.sceneRemove(msg)
+            return self.app.removeScene(sceneId)
+        except msgs.MessageParserError as err:
+            err_msg = str(err)
             logging.info(err_msg)
-            return(False, 0, err_msg)
-        if len(msg[1]) != 4:
-            err_msg = "Invalid scene.rm message. SceneId should be exactly 4 Bytes"
-            logging.info(err_msg)
-            return(False, 0, err_msg)
-        (sceneId,) = unpack("!I", msg[1])
-        return self.app.removeScene(sceneId)
+            return (False, 0, err_msg)
 
     def _handle_collect_scene_setactive(self, msg):
         # "scene.setactive" <sceneId>
-        if len(msg) != 2:
-            err_msg = "Invalid scene.setactive message. Expected 2 frames, got " + str(len(msg))
+        try:
+            (sceneId,) = msgs.MessageParser.sceneSetactive(msg)
+            return self.app.setActiveScene(sceneId)
+        except msgs.MessageParserError as err:
+            err_msg = str(err)
             logging.info(err_msg)
-            return(False, 0, err_msg)
-        if len(msg[1]) != 4:
-            err_msg = "Invalid scene.setactive message. SceneId should be exactly 4 Bytes"
-            logging.info(err_msg)
-            return(False, 0, err_msg)
-        (sceneId,) = unpack("!I", msg[1])
-        return self.app.setActiveScene(sceneId)
-
-    def _parse_color(self, msg):
-        (red, green, blue,) = unpack("BBB", msg)
-        color = np.array([red/255, green/255, blue/255])
-        return color
+            return (False, 0, err_msg)

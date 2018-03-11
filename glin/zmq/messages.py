@@ -1,6 +1,6 @@
 """constructs and parses multipart zeromq messages"""
-
-from struct import pack
+import numpy as np
+from struct import pack, unpack
 import types
 
 class MessageBuilder:
@@ -70,4 +70,148 @@ class MessageWriter:
     def uint64(self, val):
         """append a frame containing a uint64"""
         self.msg += [pack("!Q", val)]
+        return self
+
+class MessageParserError(Exception):
+    pass
+
+class MessageParser:
+    """parses a multiframe ZeroMQ message"""
+    @staticmethod
+    def mainswitch(frames):
+        """parse a mainswitch.state message"""
+        reader = MessageReader(frames)
+        res = reader.string("command").bool("state").assert_end().get()
+        return (res.state,)
+
+    @staticmethod
+    def sceneAdd(frames):
+        """parse a scene.add message"""
+        reader = MessageReader(frames)
+        results = reader.string("command").uint32("animationId").string("name").uint8_3("color").uint32("velocity").string("config").get()
+        if results.command != "scene.add":
+            raise MessageParserError("Command is not 'scene.add'")
+        return (results.animationId, results.name, np.array([results.color[0]/255, results.color[1]/255, results.color[2]/255]),
+                results.velocity/1000, results.config)
+
+    @staticmethod
+    def sceneColor(frames):
+        """parse a scene.color message"""
+        # "scene.color" <sceneId> <color>
+        reader = MessageReader(frames)
+        results = reader.string("command").uint32("sceneId").uint8_3("color").assert_end().get()
+        if results.command != "scene.color":
+            raise MessageParserError("Command is not 'scene.color'")
+        return (results.sceneId, np.array([results.color[0]/255, results.color[1]/255, results.color[2]/255]))
+
+    @staticmethod
+    def sceneConfig(frames):
+        """parse a scene.config message"""
+        # "scene.velocity" <sceneId> <config>
+        reader = MessageReader(frames)
+        results = reader.string("command").uint32("sceneId").string("config").assert_end().get()
+        if results.command != "scene.config":
+            raise MessageParserError("Command is not 'scene.config'")
+        return (results.sceneId, results.config)
+
+    @staticmethod
+    def sceneName(frames):
+        """parse a scene.name message"""
+        # "scene.velocity" <sceneId> <config>
+        reader = MessageReader(frames)
+        results = reader.string("command").uint32("sceneId").string("name").assert_end().get()
+        if results.command != "scene.name":
+            raise MessageParserError("Command is not 'scene.name'")
+        return (results.sceneId, results.name)
+
+    @staticmethod
+    def sceneRemove(frames):
+        """parse a scene.rm message"""
+        # "scene.velocity" <sceneId>
+        reader = MessageReader(frames)
+        results = reader.string("command").uint32("sceneId").assert_end().get()
+        if results.command != "scene.rm":
+            raise MessageParserError("Command is not 'scene.rm'")
+        return (results.sceneId,)
+
+    @staticmethod
+    def sceneSetactive(frames):
+        """parse a scene.rm message"""
+        # "scene.setactive" <sceneId>
+        reader = MessageReader(frames)
+        results = reader.string("command").uint32("sceneId").assert_end().get()
+        if results.command != "scene.setactive":
+            raise MessageParserError("Command is not 'scene.setactive'")
+        return (results.sceneId,)
+
+    @staticmethod
+    def sceneVelocity(frames):
+        """parse a scene.velocity message"""
+        # "scene.velocity" <sceneId> <velocity>
+        reader = MessageReader(frames)
+        results = reader.string("command").uint32("sceneId").uint32("velocity").assert_end().get()
+        if results.command != "scene.velocity":
+            raise MessageParserError("Command is not 'scene.velocity'")
+        return (results.sceneId, results.velocity/1000)
+
+class MessageReader:
+    """read message frame by frame"""
+    def __init__(self, frames):
+        self.frames = frames
+        self.results = types.SimpleNamespace()
+
+    def assert_end(self):
+        if len(self.frames) != 0:
+            raise MessageParserError("Expected end of frames, but there are frames left")
+        return self
+    def get(self):
+        """return parsed message"""
+        return self.results
+    # common
+    def _assert_is_string(self, name):
+        if not isinstance(name, str):        
+            raise TypeError("Name has to be String")
+    def _nextFrame(self):
+        try:
+            return self.frames.pop(0)
+        except IndexError as err:
+            raise MessageParserError("ZeroMQ message has to few frames") from err
+    # string types
+    def string(self, name):
+        """parse a string frame"""
+        self._assert_is_string(name)
+        f = self._nextFrame()
+        try:
+            val = f.decode('utf-8')
+            self.results.__dict__[name] = val
+        except UnicodeError as err:
+            raise MessageParserError("Message contained invalid Unicode characters") \
+                from err
+        return self
+    # Boolean
+    def bool(self, name):
+        """parse a boolean frame"""
+        self._assert_is_string(name)
+        f = self._nextFrame()
+        if len(f) != 1:
+            raise MessageParserError("Expected exacty 1 byte for boolean value")
+        val = f != b"\x00"
+        self.results.__dict__[name] = val
+        return self
+    # integer
+    def uint8_3(self, name):
+        self._assert_is_string(name)
+        f = self._nextFrame()
+        if len(f) != 3:
+            raise MessageParserError("Expected exacty 4 byte for uint32 value")
+        vals = unpack("BBB", f)
+        self.results.__dict__[name] = vals
+        return self
+    def uint32(self, name):
+        self._assert_is_string(name)
+        f = self._nextFrame()
+        if len(f) != 4:
+            raise MessageParserError("Expected exacty 4 byte for uint32 value")
+        (val,) = unpack("!I", f)
+        self.results.__dict__[name] = val
         return self
