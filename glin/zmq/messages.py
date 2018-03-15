@@ -1,41 +1,54 @@
 """constructs and parses multipart zeromq messages"""
-import numpy as np
-from struct import pack, unpack
+
 import types
+from struct import pack, unpack
+import numpy as np
 
 class MessageBuilder:
     """generates multiframe zeromq messages"""
     @staticmethod
-    def brightness(seqNr, brightness):
-        return MessageWriter().string("brightness").uint64(seqNr).uint8(int(brightness*255)).get()
+    def brightness(sequence_number, brightness):
+        """Create a brightness message"""
+        return MessageWriter().string("brightness").uint64(sequence_number).uint8(int(brightness*255)).get()
     @staticmethod
-    def mainswitch(seqNr, state):
-        return MessageWriter().string("mainswitch.state").uint64(seqNr).bool(state).get()
+    def mainswirch_state(sequence_number, state):
+        """Create a mainswitch.state message"""
+        return MessageWriter().string("mainswitch.state").uint64(sequence_number).bool(state).get()
     @staticmethod
-    def animationAdd(seqNr, animationId, animationName):
-        return MessageWriter().string("animation.add").uint64(seqNr).uint32(animationId).string(animationName).get()
+    def animation_add(sequence_number, animation_id, name):
+        """Create a animation.add message"""
+        return MessageWriter().string("animation.add").uint64(sequence_number).uint32(animation_id).string(name).get()
     @staticmethod
-    def sceneActive(seqNr, sceneId):
-        return MessageWriter().string("scene.setactive").uint64(seqNr).uint32(sceneId).get()
+    def scene_active(sequence_number, scene_id):
+        """Create a scene.setactive message"""
+        return MessageWriter().string("scene.setactive").uint64(sequence_number).uint32(scene_id).get()
     @staticmethod
-    def sceneAdd(seqNr, sceneId, animationId, name, color, velocity, config):
-        (red, green, blue) = (int(color[0]*255),int(color[1]*255),int(color[2]*255))
-        return MessageWriter().string("scene.add").uint64(seqNr).uint32(sceneId).uint32(animationId).string(name).uint8_3(red, green, blue).uint32(int(velocity * 1000)).string(config).get()
+    def scene_add(sequence_number, scene_id, animation_id, name, color, velocity, config):
+        """Create a scene.add message"""
+        (red, green, blue) = (int(color[0]*255), int(color[1]*255), int(color[2]*255))
+        return MessageWriter().string("scene.add").uint64(sequence_number).uint32(scene_id).uint32(animation_id).string(name) \
+                              .uint8_3(red, green, blue).uint32(int(velocity * 1000)).string(config).get()
     @staticmethod
-    def sceneRemove(seqNr, sceneId):
-        return MessageWriter().string("scene.rm").uint64(seqNr).uint32(sceneId).get()
+    def scene_remove(sequence_number, scene_id):
+        """Create a scene.rm message"""
+        return MessageWriter().string("scene.rm").uint64(sequence_number).uint32(scene_id).get()
     @staticmethod
-    def sceneName(seqNr, sceneId, name):
-        return MessageWriter().string("scene.name").uint64(seqNr).uint32(sceneId).string(name).get()
+    def scene_name(sequence_number, scene_id, name):
+        """Create a scene.name message"""
+        return MessageWriter().string("scene.name").uint64(sequence_number).uint32(scene_id).string(name).get()
     @staticmethod
-    def sceneConfig(seqNr, sceneId, config):
-        return MessageWriter().string("scene.config").uint64(seqNr).uint32(sceneId).string(config).get()
+    def scene_config(sequence_number, scene_id, config):
+        """Create a scene.config message"""
+        return MessageWriter().string("scene.config").uint64(sequence_number).uint32(scene_id).string(config).get()
     @staticmethod
-    def sceneColor(seqNr, sceneId, color):
-        return MessageWriter().string("scene.color").uint64(seqNr).uint32(sceneId).uint8_3(int(color[0]*255), int(color[1]*255), int(color[2]*255)).get()
+    def scene_color(sequence_number, scene_id, color):
+        """Create a scene.color message"""
+        return MessageWriter().string("scene.color").uint64(sequence_number).uint32(scene_id) \
+                              .uint8_3(int(color[0]*255), int(color[1]*255), int(color[2]*255)).get()
     @staticmethod
-    def sceneVelocity(seqNr, sceneId, velocity):
-        return MessageWriter().string("scene.velocity").uint64(seqNr).uint32(sceneId).uint32(int(velocity*1000)).get()
+    def scene_velocity(sequence_number, scene_id, velocity):
+        """Create a scene.velocity message"""
+        return MessageWriter().string("scene.velocity").uint64(sequence_number).uint32(scene_id).uint32(int(velocity*1000)).get()
 
 class MessageWriter:
     """builds zeromq messages frame by frame"""
@@ -52,16 +65,16 @@ class MessageWriter:
     # Boolean
     def bool(self, val):
         """append a frame containing a boolean"""
-        self.msg += [ b"\x01" if val else b"\x00"]
+        self.msg += [b"\x01" if val else b"\x00"]
         return self
     # integer types
     def uint8(self, val):
         """append a frame containing a uint8"""
         self.msg += [pack("B", val)]
         return self
-    def uint8_3(self, v1, v2, v3):
+    def uint8_3(self, val1, val2, val3):
         """append a frame containing 3 uint8"""
-        self.msg += [pack("BBB", v1,v2,v3)]
+        self.msg += [pack("BBB", val1, val2, val3)]
         return self
     def uint32(self, val):
         """append a frame containing a uint32"""
@@ -73,86 +86,87 @@ class MessageWriter:
         return self
 
 class MessageParserError(Exception):
+    """This Error is raised if an error happens while creating or parsing a ZeroMQ message"""
     pass
 
 class MessageParser:
     """parses a multiframe ZeroMQ message"""
     @staticmethod
-    def mainswitch(frames):
+    def mainswirch_state(frames):
         """parse a mainswitch.state message"""
         reader = MessageReader(frames)
         res = reader.string("command").bool("state").assert_end().get()
         return (res.state,)
 
     @staticmethod
-    def sceneAdd(frames):
+    def scene_add(frames):
         """parse a scene.add message"""
         reader = MessageReader(frames)
-        results = reader.string("command").uint32("animationId").string("name").uint8_3("color").uint32("velocity").string("config").get()
+        results = reader.string("command").uint32("animation_id").string("name").uint8_3("color").uint32("velocity").string("config").get()
         if results.command != "scene.add":
             raise MessageParserError("Command is not 'scene.add'")
-        return (results.animationId, results.name, np.array([results.color[0]/255, results.color[1]/255, results.color[2]/255]),
+        return (results.animation_id, results.name, np.array([results.color[0]/255, results.color[1]/255, results.color[2]/255]),
                 results.velocity/1000, results.config)
 
     @staticmethod
-    def sceneColor(frames):
+    def scene_color(frames):
         """parse a scene.color message"""
-        # "scene.color" <sceneId> <color>
+        # "scene.color" <scene_id> <color>
         reader = MessageReader(frames)
-        results = reader.string("command").uint32("sceneId").uint8_3("color").assert_end().get()
+        results = reader.string("command").uint32("scene_id").uint8_3("color").assert_end().get()
         if results.command != "scene.color":
             raise MessageParserError("Command is not 'scene.color'")
-        return (results.sceneId, np.array([results.color[0]/255, results.color[1]/255, results.color[2]/255]))
+        return (results.scene_id, np.array([results.color[0]/255, results.color[1]/255, results.color[2]/255]))
 
     @staticmethod
-    def sceneConfig(frames):
+    def scene_config(frames):
         """parse a scene.config message"""
-        # "scene.velocity" <sceneId> <config>
+        # "scene.velocity" <scene_id> <config>
         reader = MessageReader(frames)
-        results = reader.string("command").uint32("sceneId").string("config").assert_end().get()
+        results = reader.string("command").uint32("scene_id").string("config").assert_end().get()
         if results.command != "scene.config":
             raise MessageParserError("Command is not 'scene.config'")
-        return (results.sceneId, results.config)
+        return (results.scene_id, results.config)
 
     @staticmethod
-    def sceneName(frames):
+    def scene_name(frames):
         """parse a scene.name message"""
-        # "scene.velocity" <sceneId> <config>
+        # "scene.velocity" <scene_id> <config>
         reader = MessageReader(frames)
-        results = reader.string("command").uint32("sceneId").string("name").assert_end().get()
+        results = reader.string("command").uint32("scene_id").string("name").assert_end().get()
         if results.command != "scene.name":
             raise MessageParserError("Command is not 'scene.name'")
-        return (results.sceneId, results.name)
+        return (results.scene_id, results.name)
 
     @staticmethod
-    def sceneRemove(frames):
+    def scene_remove(frames):
         """parse a scene.rm message"""
-        # "scene.velocity" <sceneId>
+        # "scene.velocity" <scene_id>
         reader = MessageReader(frames)
-        results = reader.string("command").uint32("sceneId").assert_end().get()
+        results = reader.string("command").uint32("scene_id").assert_end().get()
         if results.command != "scene.rm":
             raise MessageParserError("Command is not 'scene.rm'")
-        return (results.sceneId,)
+        return (results.scene_id,)
 
     @staticmethod
-    def sceneSetactive(frames):
+    def scene_active(frames):
         """parse a scene.rm message"""
-        # "scene.setactive" <sceneId>
+        # "scene.setactive" <scene_id>
         reader = MessageReader(frames)
-        results = reader.string("command").uint32("sceneId").assert_end().get()
+        results = reader.string("command").uint32("scene_id").assert_end().get()
         if results.command != "scene.setactive":
             raise MessageParserError("Command is not 'scene.setactive'")
-        return (results.sceneId,)
+        return (results.scene_id,)
 
     @staticmethod
-    def sceneVelocity(frames):
+    def scene_velocity(frames):
         """parse a scene.velocity message"""
-        # "scene.velocity" <sceneId> <velocity>
+        # "scene.velocity" <scene_id> <velocity>
         reader = MessageReader(frames)
-        results = reader.string("command").uint32("sceneId").uint32("velocity").assert_end().get()
+        results = reader.string("command").uint32("scene_id").uint32("velocity").assert_end().get()
         if results.command != "scene.velocity":
             raise MessageParserError("Command is not 'scene.velocity'")
-        return (results.sceneId, results.velocity/1000)
+        return (results.scene_id, results.velocity/1000)
 
 class MessageReader:
     """read message frame by frame"""
@@ -161,7 +175,8 @@ class MessageReader:
         self.results = types.SimpleNamespace()
 
     def assert_end(self):
-        if len(self.frames) != 0:
+        """Assert, that there is no frame left for parsing"""
+        if self.frames: # List evaluates to false if it es empty, otherwise to true
             raise MessageParserError("Expected end of frames, but there are frames left")
         return self
     def get(self):
@@ -169,9 +184,9 @@ class MessageReader:
         return self.results
     # common
     def _assert_is_string(self, name):
-        if not isinstance(name, str):        
+        if not isinstance(name, str):
             raise TypeError("Name has to be String")
-    def _nextFrame(self):
+    def _next_frame(self):
         try:
             return self.frames.pop(0)
         except IndexError as err:
@@ -180,9 +195,9 @@ class MessageReader:
     def string(self, name):
         """parse a string frame"""
         self._assert_is_string(name)
-        f = self._nextFrame()
+        frame = self._next_frame()
         try:
-            val = f.decode('utf-8')
+            val = frame.decode('utf-8')
             self.results.__dict__[name] = val
         except UnicodeError as err:
             raise MessageParserError("Message contained invalid Unicode characters") \
@@ -192,26 +207,28 @@ class MessageReader:
     def bool(self, name):
         """parse a boolean frame"""
         self._assert_is_string(name)
-        f = self._nextFrame()
-        if len(f) != 1:
+        frame = self._next_frame()
+        if len(frame) != 1:
             raise MessageParserError("Expected exacty 1 byte for boolean value")
-        val = f != b"\x00"
+        val = frame != b"\x00"
         self.results.__dict__[name] = val
         return self
     # integer
     def uint8_3(self, name):
+        """parse a tuple of 3 uint8 values"""
         self._assert_is_string(name)
-        f = self._nextFrame()
-        if len(f) != 3:
-            raise MessageParserError("Expected exacty 4 byte for uint32 value")
-        vals = unpack("BBB", f)
+        frame = self._next_frame()
+        if len(frame) != 3:
+            raise MessageParserError("Expected exacty 3 byte for 3 unit8 values")
+        vals = unpack("BBB", frame)
         self.results.__dict__[name] = vals
         return self
     def uint32(self, name):
+        """parse a uint32 value"""
         self._assert_is_string(name)
-        f = self._nextFrame()
-        if len(f) != 4:
+        frame = self._next_frame()
+        if len(frame) != 4:
             raise MessageParserError("Expected exacty 4 byte for uint32 value")
-        (val,) = unpack("!I", f)
+        (val,) = unpack("!I", frame)
         self.results.__dict__[name] = val
         return self

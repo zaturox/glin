@@ -22,7 +22,7 @@ setup(name='glin',
                   "StaticColor = glin.animations:StaticColorAnimation",
             ],
             "glin.hwbackend": [
-                  "udp = glin.hwBackend:UDP",
+                  "udp = glin.hardware:UDP",
             ],
       },
       install_requires=[

@@ -1,3 +1,5 @@
+"""Contains some example animations"""
+
 import numpy as np
 
 class AbstractAnimation:
@@ -7,24 +9,27 @@ class AbstractAnimation:
         self.config = ""
         self.color = np.ones(3)
         self.velocity = 1.0
-    def maxFps(self):
+    def get_max_fps(self):
         """report maximum available frames per second to glin core. range [0, +infinite]"""
         return float('inf') # unlimited, use system maxFps
     @staticmethod
-    def checkConfig(config):
+    def check_config(config):
         """Just check the given config, do not apply it. Returns true, of config is valid, otherwise false."""
         return True
-    def prepare(self, numLed, targetFps):
+    def prepare(self, led_count, target_fps):
         """setup animation"""
-        self.numLed = numLed
-        self.targetFps = targetFps
-    def setConfig(self, config):
+        self.led_count = led_count
+        self.target_fps = target_fps
+    def set_config(self, config):
+        """Sets scenes custom configuration"""
         self.config = config
-    def setColor(self, color):
+    def set_color(self, color):
+        """Sets scene color"""
         self.color = color
-    def setVelocity(self, velocity):
+    def set_velocity(self, velocity):
+        """Sets scene velocity"""
         self.velocity = velocity
-    def nextFrame(self, buf):
+    def render_next_frame(self, buf):
         """render next frame into data buffer"""
         pass
     def finish(self):
@@ -32,59 +37,67 @@ class AbstractAnimation:
         pass
 
 class StaticColorAnimation(AbstractAnimation):
+    """An animation showing a static color"""
     name = "Static Color" # presentet to UI
     def __init__(self):
         super().__init__()
-    def maxFps(self):
+    def get_max_fps(self):
         return 0
-    def prepare(self, numLed, targetFps):
-        super().prepare(numLed, targetFps)
-    def nextFrame(self, buf):
+    def prepare(self, led_count, target_fps):
+        super().prepare(led_count, target_fps)
+    def render_next_frame(self, buf):
         buf[:] = self.color
 
 class NovaAnimation(AbstractAnimation):
+    """An animations inspired by novas"""
     name = "Nova"
     def __init__(self):
         super().__init__()
-        self.novas=[]
-    def maxFps(self):
+        self.novas = []
+    def get_max_fps(self):
         return 30
     class Nova:
-        def __init__(self, numLed):
-            self.numLed = numLed
+        """A single Nova"""
+        def __init__(self, led_count):
+            self.led_count = led_count
             self.color = np.array([0.5*np.random.randint(3), 0.5*np.random.randint(3), 0.5*np.random.randint(3)])
-            self.center = np.random.randint(self.numLed)
-            self.externalTime = 0
+            self.center = np.random.randint(self.led_count)
+            self.external_time = 0
             self.time = 0
             self.velocity = np.random.randint(1, 4)
         def tick(self, stepsize):
-            self.externalTime += stepsize
-            self.time = int(self.externalTime / self.velocity)
-        def writeData(self, data):
-            if (self.time < 24):
+            """Go forward in time"""
+            self.external_time += stepsize
+            self.time = int(self.external_time / self.velocity)
+        def write_data(self, data):
+            """write this Novas frame LED data to buffer"""
+            if self.time < 24:
                 data[self.center] += (self.color / 2**(self.time / 3))
-            if (self.time > 0):
-                if (self.center-self.time >= -10):
-                    for exp, pos in enumerate(np.arange(self.center-self.time, self.center-self.time+10 if self.center-self.time+10 < self.center else self.center)):
+            if self.time > 0:
+                if self.center-self.time >= -10:
+                    for exp, pos in enumerate(np.arange(self.center-self.time,
+                                                        self.center-self.time+10 if self.center-self.time+10 < self.center else self.center)):
                         if pos >= 0:
                             data[pos] += self.color / 2**exp
-                if (self.center+self.time < self.numLed + 10):
-                    for exp, pos in enumerate(np.arange(self.center+self.time, self.center+self.time-10 if self.center+self.time-10 > self.center else self.center, -1)):
-                        if pos < self.numLed:
+                if self.center+self.time < self.led_count + 10:
+                    for exp, pos in enumerate(np.arange(self.center+self.time,
+                                                        self.center+self.time-10 if self.center+self.time-10 > self.center else self.center, -1)):
+                        if pos < self.led_count:
                             data[pos] += self.color / 2**exp
         def dead(self):
-            return self.center-self.time+10 < 0 and self.center+self.time >= self.numLed+10
-    def prepare(self, numLed, targetFps):
-        super().prepare(numLed, targetFps)
-        self.novas=[self.Nova(self.numLed),self.Nova(self.numLed),self.Nova(self.numLed)]
-    def nextFrame(self, buf):
-        data = np.zeros((self.numLed,3))
+            """determine wheather this Nova is finished. This is when all parts of the animation left the viewport"""
+            return self.center-self.time+10 < 0 and self.center+self.time >= self.led_count+10
+    def prepare(self, led_count, target_fps):
+        super().prepare(led_count, target_fps)
+        self.novas = [self.Nova(self.led_count), self.Nova(self.led_count), self.Nova(self.led_count)]
+    def render_next_frame(self, buf):
+        data = np.zeros((self.led_count, 3))
         if np.random.rand() < 1/60*self.velocity:
-            self.novas.append(self.Nova(self.numLed))
+            self.novas.append(self.Nova(self.led_count))
         for nova in self.novas:
             nova.tick(self.velocity)
-            nova.writeData(data)
-        buf[:,:] = np.clip(data, 0, 1)
+            nova.write_data(data)
+        buf[:, :] = np.clip(data, 0, 1)
         for nova in self.novas:
             if nova.dead():
                 self.novas.remove(nova)
