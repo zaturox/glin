@@ -1,6 +1,7 @@
 """constructs and parses multipart zeromq messages"""
 
 import types
+import struct
 from struct import pack, unpack
 import numpy as np
 
@@ -11,7 +12,7 @@ class MessageBuilder:
         """Create a brightness message"""
         return MessageWriter().string("brightness").uint64(sequence_number).uint8(int(brightness*255)).get()
     @staticmethod
-    def mainswirch_state(sequence_number, state):
+    def mainswitch_state(sequence_number, state):
         """Create a mainswitch.state message"""
         return MessageWriter().string("mainswitch.state").uint64(sequence_number).bool(state).get()
     @staticmethod
@@ -70,19 +71,31 @@ class MessageWriter:
     # integer types
     def uint8(self, val):
         """append a frame containing a uint8"""
-        self.msg += [pack("B", val)]
+        try:
+            self.msg += [pack("B", val)]
+        except struct.error:
+            raise ValueError("Expected uint32")
         return self
     def uint8_3(self, val1, val2, val3):
         """append a frame containing 3 uint8"""
-        self.msg += [pack("BBB", val1, val2, val3)]
+        try:
+            self.msg += [pack("BBB", val1, val2, val3)]
+        except struct.error:
+            raise ValueError("Expected uint8")
         return self
     def uint32(self, val):
         """append a frame containing a uint32"""
-        self.msg += [pack("!I", val)]
+        try:
+            self.msg += [pack("!I", val)]
+        except struct.error:
+            raise ValueError("Expected uint32")
         return self
     def uint64(self, val):
         """append a frame containing a uint64"""
-        self.msg += [pack("!Q", val)]
+        try:
+            self.msg += [pack("!Q", val)]
+        except struct.error:
+            raise ValueError("Expected uint64")
         return self
 
 class MessageParserError(Exception):
@@ -92,10 +105,21 @@ class MessageParserError(Exception):
 class MessageParser:
     """parses a multiframe ZeroMQ message"""
     @staticmethod
-    def mainswirch_state(frames):
+    def brightness(frames):
+        """parse a brightness message"""
+        reader = MessageReader(frames)
+        res = reader.string("command").uint32("brightness").assert_end().get()
+        if res.command != "brightness":
+            raise MessageParserError("Command is not 'brightness'")
+        return (res.brightness/1000,)
+
+    @staticmethod
+    def mainswitch_state(frames):
         """parse a mainswitch.state message"""
         reader = MessageReader(frames)
         res = reader.string("command").bool("state").assert_end().get()
+        if res.command != "mainswitch.state":
+            raise MessageParserError("Command is not 'mainswitch.state'")
         return (res.state,)
 
     @staticmethod
@@ -121,7 +145,7 @@ class MessageParser:
     @staticmethod
     def scene_config(frames):
         """parse a scene.config message"""
-        # "scene.velocity" <scene_id> <config>
+        # "scene.config" <scene_id> <config>
         reader = MessageReader(frames)
         results = reader.string("command").uint32("scene_id").string("config").assert_end().get()
         if results.command != "scene.config":
@@ -131,7 +155,7 @@ class MessageParser:
     @staticmethod
     def scene_name(frames):
         """parse a scene.name message"""
-        # "scene.velocity" <scene_id> <config>
+        # "scene.name" <scene_id> <config>
         reader = MessageReader(frames)
         results = reader.string("command").uint32("scene_id").string("name").assert_end().get()
         if results.command != "scene.name":
@@ -141,7 +165,7 @@ class MessageParser:
     @staticmethod
     def scene_remove(frames):
         """parse a scene.rm message"""
-        # "scene.velocity" <scene_id>
+        # "scene.rm" <scene_id>
         reader = MessageReader(frames)
         results = reader.string("command").uint32("scene_id").assert_end().get()
         if results.command != "scene.rm":

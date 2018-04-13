@@ -268,7 +268,7 @@ class GlinAppZmqPublisher:
     def publish_mainswitch_state(self, state):
         """publish changed mainswitch state"""
         self.sequence_number += 1
-        self.publisher.send_multipart(msgs.MessageBuilder.mainswirch_state(self.sequence_number, state))
+        self.publisher.send_multipart(msgs.MessageBuilder.mainswitch_state(self.sequence_number, state))
         return self.sequence_number
     def publish_active_scene(self, scene_id):
         """publish changed active scene"""
@@ -310,7 +310,7 @@ class GlinAppZmqPublisher:
         """Handles a snapshot request"""
         logging.debug("Sending state snapshot request")
         identity = msg[0]
-        self.snapshot.send_multipart([identity] + msgs.MessageBuilder.mainswirch_state(self.sequence_number, self.app.state.mainswitch))
+        self.snapshot.send_multipart([identity] + msgs.MessageBuilder.mainswitch_state(self.sequence_number, self.app.state.mainswitch))
         self.snapshot.send_multipart([identity] + msgs.MessageBuilder.brightness(self.sequence_number, self.app.state.brightness))
         for animation_id, anim  in enumerate(self.app.state.animationClasses):
             self.snapshot.send_multipart([identity] + msgs.MessageBuilder.animation_add(self.sequence_number, animation_id, anim.name))
@@ -389,20 +389,18 @@ class GlinAppZmqCollector:
             raise
 
     def _handle_collect_brightness(self, msg):
-        if len(msg) != 2:
-            err_msg = "Invalid brightness message. Expected 2 frames"
+        try:
+            (brightness,) = msgs.MessageParser.brightness(msg)
+            return self.app.set_brightness(brightness)
+        except msgs.MessageParserError as err:
+            err_msg = str(err)
             logging.info(err_msg)
-            return (False, 0, )
-        if len(msg[1]) != 1:
-            err_msg = "Invalid brightness message. Parameter must be exactly 1 Byte"
-            logging.info(err_msg)
-            return(False, 0, err_msg)
-        return self.app.set_brightness(msg[1][0]/255)
+            return (False, 0, err_msg)
 
     def _handle_collect_mainswitch_state(self, msg):
         # "mainswitch.state" <bool>
         try:
-            (state,) = msgs.MessageParser.mainswirch_state(msg)
+            (state,) = msgs.MessageParser.mainswitch_state(msg)
             return self.app.set_mainswitch_state(state)
         except msgs.MessageParserError as err:
             err_msg = str(err)
