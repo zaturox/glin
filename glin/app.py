@@ -22,7 +22,7 @@ class GlinApp:
         self.port = port
 
         self.loop = IOLoop.instance()
-        self.caller = PeriodicCallback(self._on_next_frame, 1000/30, self.loop)
+        self.caller = PeriodicCallback(self._on_next_frame, 1000/30)
         self.hw_communication = hw_backend
         self.hw_communication.connect()
         self.zmq_collector = GlinAppZmqCollector(self, self.ctx)
